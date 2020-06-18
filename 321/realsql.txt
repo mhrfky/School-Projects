@@ -1,0 +1,100 @@
+
+
+
+CREATE TABLE albums (
+  id int(11) NOT NULL,
+  genre varchar(30) NOT NULL,
+  title varchar(30) NOT NULL
+) ;
+ALTER TABLE albums
+  ADD PRIMARY KEY (id);
+ALTER TABLE albums
+  MODIFY id int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
+
+CREATE TABLE artists (
+  name varchar(30) NOT NULL,
+  surname varchar(30) NOT NULL
+);
+CREATE TABLE contribute (
+  name varchar(30) NOT NULL,
+  surname varchar(30) NOT NULL,
+  songid int(11) DEFAULT NULL
+) ;
+CREATE TABLE liked (
+  username varchar(30) NOT NULL,
+  id int(11) DEFAULT NULL
+);
+CREATE TABLE likedalbums (
+  username varchar(30) NOT NULL,
+  albumid int(11) DEFAULT NULL
+);
+
+CREATE TABLE listeners (
+  username varchar(30) NOT NULL,
+  email varchar(30) NOT NULL
+) ;
+ALTER TABLE listeners
+  ADD UNIQUE KEY username (username),
+  ADD UNIQUE KEY email (email);
+
+
+
+CREATE TABLE songof (
+  name varchar(30) NOT NULL,
+  surname varchar(30) NOT NULL,
+  albumid int(11) DEFAULT NULL,
+  songid int(11) DEFAULT NULL
+);
+ALTER TABLE songof
+  ADD UNIQUE KEY songid (songid);
+
+
+
+CREATE TABLE songs (
+  id int(11) NOT NULL,
+  title varchar(30) NOT NULL
+) ;
+ALTER TABLE songs
+  ADD PRIMARY KEY (id);
+ALTER TABLE songs
+  MODIFY id int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
+
+
+CREATE VIEW song_detail_viewall  AS  select a.id AS id,a.title AS title,a.album AS album,a.genre AS genre,a.name AS name,a.surname AS surname,a.albumid AS albumid,b.name AS contributorName,b.surname AS contributorSurname from ((select a.id AS id,a.title AS title,b.title AS album,b.genre AS genre,a.name AS name,a.surname AS surname,a.albumid AS albumid from (albums b left join (select a.id AS id,a.title AS title,b.albumid AS albumid,b.name AS name,b.surname AS surname from (songs a join songof b on(b.songid = a.id))) a on(a.albumid = b.id))) a left join contribute b on(a.id = b.songid)) ;
+CREATE VIEW bigger_view  AS  select a.id AS id,a.title AS title,a.album AS 
+album,a.genre AS genre,a.name AS name,a.surname AS surname,a.albumid AS albumid,a.contributorName AS contributorName,a.contributorSurname AS contributorSurname,coalesce(b.likes,0,b.likes) AS likes from (song_detail_viewall a left join 
+(select count(liked.id) AS likes,liked.id AS id from liked group by liked.id) b on(a.id = b.id)) ;
+
+CREATE VIEW newer_bigger_view  AS  select a.id AS id,a.title AS title,a.album AS album,a.genre AS genre,a.name AS name,a.surname AS surname,a.albumid AS albumid,group_concat(a.con separator ',') AS cname,a.likes AS likes from (select bigger_view.id AS id,bigger_view.title AS title,bigger_view.album AS album,bigger_view.genre AS genre,bigger_view.name AS name,bigger_view.surname AS surname,bigger_view.albumid AS albumid,concat(bigger_view.contributorName,' ',bigger_view.contributorSurname) AS con,bigger_view.likes AS likes from bigger_view) a group by a.id ;
+
+
+
+
+
+CREATE TRIGGER albumdelete BEFORE DELETE ON albums FOR EACH ROW DELETE FROM songof WHERE songof.albumid = old.id;
+
+CREATE TRIGGER albumlike AFTER INSERT ON likedalbums FOR EACH ROW INSERT INTO liked(username,id)
+SELECT new.username ,songid
+FROM songof
+WHERE songof.albumid = new.albumid;
+
+
+CREATE TRIGGER songdelete AFTER DELETE ON songs FOR EACH ROW DELETE FROM liked WHERE id = old.id;
+
+CREATE TRIGGER albumdeletesequence AFTER DELETE ON songof FOR EACH ROW DELETE FROM songs WHERE songs.id = old.songid;
+
+CREATE TRIGGER contributordelete AFTER DELETE ON songs
+FOR EACH ROW
+DELETE FROM contribute
+WHERE songid = old.id;
+
+
+
+DELIMITER //
+CREATE PROCEDURE findContributors (IN nm VARCHAR(30), IN srnm VARCHAR(30))  
+BEGIN
+SELECT b.name,b.surname FROM (SELECT songid FROM songof WHERE name = nm and surname =srnm) a INNER JOIN contribute b  on a.songid = b.songid 
+UNION
+SELECT d.name,d.surname FROM (SELECT songid FROM contribute WHERE name = nm AND surname = srnm) c INNER JOIN songof d on c.songid = d.songid;
+END //
+DELIMITER ;
